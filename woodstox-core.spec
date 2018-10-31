@@ -5,7 +5,7 @@
 
 Name:           %{core_name}
 Version:        4.2.0
-Release:        2.2
+Release:        2.3
 Summary:        High-performance XML processor
 Group:		Development/Java
 License:        ASL 2.0 or LGPLv2+ or BSD
