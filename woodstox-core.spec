@@ -9,7 +9,7 @@ Release:        2.3
 Summary:        High-performance XML processor
 Group:		Development/Java
 License:        ASL 2.0 or LGPLv2+ or BSD
-URL:            http://%{base_name}.codehaus.org/
+URL:            https://%{base_name}.codehaus.org/
 BuildArch:      noarch
 
 Source0:        http://%{base_name}.codehaus.org/%{version}/%{core_name}-src-%{version}.tar.gz
