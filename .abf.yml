@@ -1,2 +1,4 @@
 sources:
+  woodstox-core-6.4.0.tar.gz: 32ce7f79f073b7b74c7e7102eada150bcc549808
+removed_sources:
   woodstox-core-src-4.2.0.tar.gz: 104df2c6b597dc6e0a4e7256e532f9880942b578

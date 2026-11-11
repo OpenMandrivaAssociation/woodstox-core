@@ -1,112 +1,133 @@
-%{?_javapackages_macros:%_javapackages_macros}
-%global base_name woodstox
-%global core_name %{base_name}-core
-%global stax2_ver  3.1.1
-
-Name:           %{core_name}
-Version:        4.2.0
-Release:        2.3
-Summary:        High-performance XML processor
+Name:		woodstox-core
+Version:	6.4.0
+Release:	1
+Summary:	High-performance StAX XML processor
 Group:		Development/Java
-License:        ASL 2.0 or LGPLv2+ or BSD
-URL:            https://%{base_name}.codehaus.org/
-BuildArch:      noarch
+License:	Apache-2.0
+URL:		https://github.com/FasterXML/woodstox
+# Tag woodstox-core-6.4.0. The Maven wrapper jar is removed from this archive.
+Source0:	https://github.com/FasterXML/woodstox/archive/refs/tags/woodstox-core-%{version}.tar.gz#/woodstox-core-%{version}.tar.gz
 
-Source0:        http://%{base_name}.codehaus.org/%{version}/%{core_name}-src-%{version}.tar.gz
-Patch0:         %{name}-stax2-api.patch
-
-BuildRequires:  maven-local
-BuildRequires:  mvn(javax.xml.stream:stax-api)
-BuildRequires:  mvn(net.java.dev.msv:msv-core)
-BuildRequires:  mvn(net.java.dev.msv:xsdlib)
-BuildRequires:  mvn(org.apache.felix:org.osgi.core)
-BuildRequires:  mvn(org.codehaus.woodstox:stax2-api)
-# Transitive devel dependencies needed because some packages don't
-# install effective POMs:
-BuildRequires:  mvn(net.java:jvnet-parent:pom:)
+BuildArch:	noarch
+BuildRequires:	java-current-devel
+BuildRequires:	sysjar
+BuildRequires:	mvn(org.codehaus.woodstox:stax2-api)
 
 %description
-Woodstox is a high-performance validating namespace-aware StAX-compliant
-(JSR-173) Open Source XML-processor written in Java.
-XML processor means that it handles both input (== parsing)
-and output (== writing, serialization)), as well as supporting tasks
-such as validation.
-
-%package javadoc
-Summary:          API documentation for %{name}
-
-%description javadoc
-This package contains the API documentation for %{name}.
+Woodstox is a StAX XML processor. Gradle 9.9.1 accepts 6.4.0.
+RNG and W3C Schema factories are not compiled: upstream shades MSV
+into the jar, and MSV is not packaged. The StAX reader, writer, and
+DTD schema factory are.
 
 %prep
-%setup -q -n %{base_name}-%{version}
-%patch0
-
-# Create POM from template
-sed s/@VERSION@/%{version}/\;s/@REQ_STAX2_VERSION@/%{stax2_ver}/ \
-    src/maven/%{name}-asl.pom >pom.xml
-
-# Remove bundled libraries.
-rm -rf lib
-rm -rf src/maven
-rm -rf src/resources
-rm -rf src/samples
-rm -rf src/java/org
-rm -rf src/test/org
-rm -rf src/test/stax2
-
-# Bundled libraries were removed, so dependencies on them need to be
-# added.
-%pom_add_dep net.java.dev.msv:msv-core
-%pom_add_dep org.apache.felix:org.osgi.core
-%pom_add_dep net.java.dev.msv:xsdlib
-
-# Upstream uses non-standard directory structure.
-%pom_xpath_inject pom:project "
-    <build>
-      <sourceDirectory>src/java</sourceDirectory>
-      <testSourceDirectory>src/test</testSourceDirectory>
-    </build>"
-
-%mvn_alias ":{woodstox-core}-asl" :@1-lgpl
-%mvn_file : %{name}{,-asl,-lgpl}
+%autosetup -n woodstox-woodstox-core-%{version} -p1
+find . \( -name '*.jar' -o -name '*.class' -o -name '*.so' -o -name '*.node' -o -name '*.wasm' \) -delete
 
 %build
-# stax2 missing -> cannot compile tests -> tests skipped
-%mvn_build -f
+# CLASS-retention marker. Not installed. The real bnd jar is not in cooker.
+mkdir -p bnd/aQute/bnd/annotation/spi
+cat > bnd/aQute/bnd/annotation/Resolution.java <<'EOF'
+package aQute.bnd.annotation;
+public enum Resolution {
+	MANDATORY,
+	OPTIONAL
+}
+EOF
+cat > bnd/aQute/bnd/annotation/spi/ServiceProvider.java <<'EOF'
+package aQute.bnd.annotation.spi;
+import aQute.bnd.annotation.Resolution;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+@Retention(RetentionPolicy.CLASS)
+@Target(ElementType.TYPE)
+public @interface ServiceProvider {
+	Class<?> value();
+	Resolution resolution() default Resolution.MANDATORY;
+}
+EOF
+javac --release 8 -encoding UTF-8 -Xlint:-options -d bnd \
+	bnd/aQute/bnd/annotation/Resolution.java \
+	bnd/aQute/bnd/annotation/spi/ServiceProvider.java
+jar cf bnd-ann.jar -C bnd aQute
+
+mkdir -p classes
+find src/main/java -name '*.java' ! -name module-info.java \
+	! -path '*/msv/*' ! -path '*/osgi/*' > sources.list
+test "$(wc -l < sources.list)" -eq 166
+javac --release 8 -encoding UTF-8 -Xlint:-options \
+	-cp "bnd-ann.jar:%{_javadir}/stax2-api.jar" \
+	-d classes @sources.list
+/bin/cp -a src/main/resources/. classes/
+# Those two factories are the MSV shade, which this build does not include.
+printf '%s\n' com.ctc.wstx.dtd.DTDSchemaFactory \
+	> classes/META-INF/services/org.codehaus.stax2.validation.XMLValidationSchemaFactory
+/bin/rm -f classes/META-INF/services/org.codehaus.stax2.validation.XMLValidationSchemaFactory.relaxng
+/bin/rm -f classes/META-INF/services/org.codehaus.stax2.validation.XMLValidationSchemaFactory.w3c
+jar cf woodstox-core.jar -C classes .
+cat > woodstox-core.pom <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.fasterxml.woodstox</groupId>
+  <artifactId>woodstox-core</artifactId>
+  <version>6.4.0</version>
+  <name>Woodstox</name>
+  <description>Woodstox StAX XML processor.</description>
+  <url>https://github.com/FasterXML/woodstox</url>
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    </license>
+  </licenses>
+  <dependencies>
+    <dependency>
+      <groupId>org.codehaus.woodstox</groupId>
+      <artifactId>stax2-api</artifactId>
+      <version>4.2.1</version>
+    </dependency>
+  </dependencies>
+</project>
+EOF
 
 %install
-%mvn_install
+sysjar install --buildroot %{buildroot} \
+	--artifact woodstox-core.pom:woodstox-core.jar \
+	--file-name woodstox-core \
+	--filelist .mfiles
+
+%check
+JAR=%{buildroot}%{_javadir}/woodstox-core.jar
+test -f "$JAR"
+mkdir -p check
+cat > check/Smoke.java <<'END'
+import com.ctc.wstx.stax.WstxInputFactory;
+import javax.xml.stream.XMLStreamReader;
+import java.io.StringReader;
+public class Smoke {
+	public static void main(String[] args) throws Exception {
+		XMLStreamReader reader = new WstxInputFactory().createXMLStreamReader(
+			new StringReader("<a>woodstox_ok</a>"));
+		String text = "";
+		while (reader.hasNext()) {
+			int event = reader.next();
+			if (event == XMLStreamReader.CHARACTERS) {
+				text += reader.getText();
+			}
+		}
+		reader.close();
+		System.out.println(text.trim());
+	}
+}
+END
+javac --release 8 -encoding UTF-8 -Xlint:-options \
+	-cp "$JAR:%{_javadir}/stax2-api.jar" -d check check/Smoke.java
+java -cp "check:$JAR:%{_javadir}/stax2-api.jar" Smoke > check/out.txt
+cat check/out.txt
+grep -F -q 'woodstox_ok' check/out.txt
 
 %files -f .mfiles
-%doc release-notes
-
-%files javadoc -f .mfiles-javadoc
-%doc release-notes/asl release-notes/lgpl release-notes/bsd
-
-%changelog
-* Sun Aug 04 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 4.2.0-2
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_20_Mass_Rebuild
-
-* Thu Jun 20 2013 Mikolaj Izdebski <mizdebsk@redhat.com> - 4.2.0-1
-- Update to upstream version 4.2.0
-
-* Thu Jun 20 2013 Mikolaj Izdebski <mizdebsk@redhat.com> - 4.1.2-6
-- Install NOTICE file with javadoc package
-- Update to current packaging guidelines
-
-* Fri Feb 15 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 4.1.2-5
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_19_Mass_Rebuild
-
-* Wed Feb 06 2013 Java SIG <java-devel@lists.fedoraproject.org> - 4.1.2-4
-- Update for https://fedoraproject.org/wiki/Fedora_19_Maven_Rebuild
-- Replace maven BuildRequires with maven-local
-
-* Sun Jul 22 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 4.1.2-3
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_18_Mass_Rebuild
-
-* Sat Jan 14 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 4.1.2-2
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_17_Mass_Rebuild
-
-* Tue Sep 13 2011 Jaromir Capik <jcapik@redhat.com> - 4.1.2-1
-- Initial version
+%license LICENSE
+%doc README.md
