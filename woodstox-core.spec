@@ -1,11 +1,11 @@
 Name:		woodstox-core
-Version:	6.4.0
+Version:	6.7.0
 Release:	1
 Summary:	High-performance StAX XML processor
 Group:		Development/Java
 License:	Apache-2.0
 URL:		https://github.com/FasterXML/woodstox
-# Tag woodstox-core-6.4.0. The Maven wrapper jar is removed from this archive.
+# Tag woodstox-core-6.7.0. The Maven wrapper jar is removed from this archive.
 Source0:	https://github.com/FasterXML/woodstox/archive/refs/tags/woodstox-core-%{version}.tar.gz#/woodstox-core-%{version}.tar.gz
 
 BuildArch:	noarch
@@ -14,16 +14,21 @@ BuildRequires:	sysjar
 BuildRequires:	mvn(org.codehaus.woodstox:stax2-api)
 
 %description
-Woodstox is a StAX XML processor. Gradle 9.9.1 accepts 6.4.0.
-RNG and W3C Schema factories are not compiled: upstream shades MSV
-into the jar, and MSV is not packaged. The StAX reader, writer, and
-DTD schema factory are.
+Woodstox is a StAX XML processor. 6.7.0 accepts a null argument to
+XMLEventFactory.setLocation. 6.6 corrects DTD event locations,
+optional surrogate-pair entities, and character references that are
+left unexpanded. 6.5 makes the OSGi service-loader registrar
+requirement optional. RNG and W3C Schema factories are not compiled:
+upstream shades MSV into the jar, and MSV is not packaged. The StAX
+reader, writer, and DTD schema factory are.
 
 %prep
 %autosetup -n woodstox-woodstox-core-%{version} -p1
 find . \( -name '*.jar' -o -name '*.class' -o -name '*.so' -o -name '*.node' -o -name '*.wasm' \) -delete
 
 %build
+export JAVA_HOME=%{_jvmdir}/java-openjdk
+export PATH="$JAVA_HOME/bin:$PATH"
 # CLASS-retention marker. Not installed. The real bnd jar is not in cooker.
 mkdir -p bnd/aQute/bnd/annotation/spi
 cat > bnd/aQute/bnd/annotation/Resolution.java <<'EOF'
@@ -72,7 +77,7 @@ cat > woodstox-core.pom <<'EOF'
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.fasterxml.woodstox</groupId>
   <artifactId>woodstox-core</artifactId>
-  <version>6.4.0</version>
+  <version>%{version}</version>
   <name>Woodstox</name>
   <description>Woodstox StAX XML processor.</description>
   <url>https://github.com/FasterXML/woodstox</url>
@@ -86,7 +91,7 @@ cat > woodstox-core.pom <<'EOF'
     <dependency>
       <groupId>org.codehaus.woodstox</groupId>
       <artifactId>stax2-api</artifactId>
-      <version>4.2.1</version>
+      <version>4.2.2</version>
     </dependency>
   </dependencies>
 </project>
@@ -99,6 +104,8 @@ sysjar install --buildroot %{buildroot} \
 	--filelist .mfiles
 
 %check
+export JAVA_HOME=%{_jvmdir}/java-openjdk
+export PATH="$JAVA_HOME/bin:$PATH"
 JAR=%{buildroot}%{_javadir}/woodstox-core.jar
 test -f "$JAR"
 mkdir -p check
